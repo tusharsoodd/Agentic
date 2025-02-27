@@ -11,8 +11,8 @@ def llm_ask(task):
     # Use Ollama's Gemma2:2B to get a command suggestion
     prompt = (
         f"You are an AI assistant with access to terminal commands. "
-        f"Suggest the safest and most efficient terminal command on Windows to: {task}.\n"
-        f"Only provide the command without any explanations."
+        f"Suggest the safest and most efficient terminal commands on Windows to: {task}.\n"
+        f"Only provide the commands without any explanations."
         f"Also do not encapsulate the code in quotes or backticks."
     )
     
@@ -29,17 +29,20 @@ def llm_ask(task):
     raw_output = response.stdout.strip()
     print(f"\nRaw LLM response:\n{raw_output}\n")  # Debugging line
 
-    # Extract the command by removing code block markers
-    command = re.sub(r"```(bash)?", "", raw_output).strip()
-    return remove_surrounding_quotes(command)
+    # Extract the commands by removing code block markers and splitting by semicolon
+    commands = re.sub(r"```(bash)?", "", raw_output).strip().split('\n')
+    commands = [remove_surrounding_quotes(command.strip()) for command in commands]
+    return commands
 
-def llm_analyse_response(question,command,response):
-    # Use Ollama's Gemma2:2B to get a command suggestion
+def llm_analyse_response(question, commands, responses):
+    # Combine commands and responses into a single string
+    combined = "\n".join([f"Command: {cmd}\nResponse: {resp}" for cmd, resp in zip(commands, responses)])
+    
+    # Use Ollama's Gemma2:2B to get an analysis
     prompt = (
         f"Given this question: {question}\n"
-        f"I ran this command: {command}\n"
-        f"and received this response on the windows terminal: {response}"
-        f"How does the command answer the question? Please answer in one sentence."
+        f"I ran these commands and received these responses on the windows terminal:\n{combined}\n"
+        f"How do the commands answer the question? Please answer in one sentence."
     )
     
     # Use the ollama CLI to get the response
@@ -53,37 +56,40 @@ def llm_analyse_response(question,command,response):
     
     # Clean the response by removing code block markers and extra whitespace
     raw_output = response.stdout.strip()
-    print(f"\nAnalaysis:\n{raw_output}\n")  # Debugging line
+    print(f"\nAnalysis:\n{raw_output}\n")  # Debugging line
 
-    # Extract the command by removing code block markers
-    # command = re.sub(r"```(bash)?", "", raw_output).strip()
-    # return remove_surrounding_quotes(command)
+    return raw_output
 
 
-def execute_command(command):
-    print(command)
-    try:
-        result = subprocess.run(command, shell=True, check=True, 
-                                text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        print("\nOutput:\n", result.stdout)
-        return result
-    except subprocess.CalledProcessError as e:
-        print("\nError:\n", e.stderr)
+def execute_command(commands):
+    responses = []
+    for command in commands:
+        print(f"Running command: {command}")
+        try:
+            result = subprocess.run(command, shell=True, check=True, 
+                                    text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            print("\nOutput:\n", result.stdout)
+            responses.append(result.stdout)
+        except subprocess.CalledProcessError as e:
+            print("\nError:\n", e.stderr)
+            responses.append(e.stderr)
+            break
+    return responses
 
 def main():
     print("Welcome to the Terminal Assistant (Gemma2 Edition)!")
     task = input("What would you like to do? ")
     
     # Ask LLM for a terminal command suggestion
-    command = llm_ask(task)
-    print(f"\nSuggested Command: {command}")
+    commands = llm_ask(task)
+    print(f"\nSuggested Command: {commands}")
     
     # Get user approval
     approval = input("Do you want to run this command? (yes/no): ").strip().lower()
     if approval == 'yes':
         print("\nRunning command...")
-        response=execute_command(command)
-        analysis=llm_analyse_response(task, command, response)
+        responses=execute_command(commands)
+        analysis=llm_analyse_response(task, commands, responses)
         
     else:
         print("Command not executed.")
