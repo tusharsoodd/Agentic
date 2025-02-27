@@ -1,7 +1,13 @@
 import subprocess
 import re
 
-def ask_llm(task):
+def remove_surrounding_quotes(text):
+    # Loop to remove all surrounding quotes
+    while (text.startswith('`') and text.endswith('`')) or (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
+        text = text[1:-1]
+    return text
+
+def llm_ask(task):
     # Use Ollama's Gemma2:2B to get a command suggestion
     prompt = (
         f"You are an AI assistant with access to terminal commands. "
@@ -15,7 +21,8 @@ def ask_llm(task):
         ['ollama', 'run', 'gemma2:2b', prompt],
         text=True,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
+        stderr=subprocess.PIPE,
+        encoding='utf-8'
     )
     
     # Clean the response by removing code block markers and extra whitespace
@@ -24,7 +31,34 @@ def ask_llm(task):
 
     # Extract the command by removing code block markers
     command = re.sub(r"```(bash)?", "", raw_output).strip()
-    return command
+    return remove_surrounding_quotes(command)
+
+def llm_analyse_response(question,command,response):
+    # Use Ollama's Gemma2:2B to get a command suggestion
+    prompt = (
+        f"Given this question: {question}\n"
+        f"I ran this command: {command}\n"
+        f"and received this response on the windows terminal: {response}"
+        f"How does the command answer the question? Please answer in one sentence."
+    )
+    
+    # Use the ollama CLI to get the response
+    response = subprocess.run(
+        ['ollama', 'run', 'gemma2:2b', prompt],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        encoding='utf-8'
+    )
+    
+    # Clean the response by removing code block markers and extra whitespace
+    raw_output = response.stdout.strip()
+    print(f"\nAnalaysis:\n{raw_output}\n")  # Debugging line
+
+    # Extract the command by removing code block markers
+    # command = re.sub(r"```(bash)?", "", raw_output).strip()
+    # return remove_surrounding_quotes(command)
+
 
 def execute_command(command):
     print(command)
@@ -41,7 +75,7 @@ def main():
     task = input("What would you like to do? ")
     
     # Ask LLM for a terminal command suggestion
-    command = ask_llm(task)
+    command = llm_ask(task)
     print(f"\nSuggested Command: {command}")
     
     # Get user approval
@@ -49,7 +83,8 @@ def main():
     if approval == 'yes':
         print("\nRunning command...")
         response=execute_command(command)
-        # print(response)
+        analysis=llm_analyse_response(task, command, response)
+        
     else:
         print("Command not executed.")
 
