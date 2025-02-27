@@ -1,0 +1,57 @@
+import subprocess
+import re
+
+def ask_llm(task):
+    # Use Ollama's Gemma2:2B to get a command suggestion
+    prompt = (
+        f"You are an AI assistant with access to terminal commands. "
+        f"Suggest the safest and most efficient terminal command on Windows to: {task}.\n"
+        f"Only provide the command without any explanations."
+        f"Also do not encapsulate the code in quotes or backticks."
+    )
+    
+    # Use the ollama CLI to get the response
+    response = subprocess.run(
+        ['ollama', 'run', 'gemma2:2b', prompt],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+    
+    # Clean the response by removing code block markers and extra whitespace
+    raw_output = response.stdout.strip()
+    print(f"\nRaw LLM response:\n{raw_output}\n")  # Debugging line
+
+    # Extract the command by removing code block markers
+    command = re.sub(r"```(bash)?", "", raw_output).strip()
+    return command
+
+def execute_command(command):
+    print(command)
+    try:
+        result = subprocess.run(command, shell=True, check=True, 
+                                text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        print("\nOutput:\n", result.stdout)
+        return result
+    except subprocess.CalledProcessError as e:
+        print("\nError:\n", e.stderr)
+
+def main():
+    print("Welcome to the Terminal Assistant (Gemma2 Edition)!")
+    task = input("What would you like to do? ")
+    
+    # Ask LLM for a terminal command suggestion
+    command = ask_llm(task)
+    print(f"\nSuggested Command: {command}")
+    
+    # Get user approval
+    approval = input("Do you want to run this command? (yes/no): ").strip().lower()
+    if approval == 'yes':
+        print("\nRunning command...")
+        response=execute_command(command)
+        # print(response)
+    else:
+        print("Command not executed.")
+
+if __name__ == "__main__":
+    main()
